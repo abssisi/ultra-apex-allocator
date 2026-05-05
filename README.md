@@ -6,3 +6,12 @@
 ![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-brightgreen)
 # ultra-apex-allocator
 High-performance lock-free C++20 memory allocator for Linux x86-64
+
+🚧 المشروع في مرحلة تجريبية
+هذا المشروع لا يزال قيد التطوير النشط، وقد تحدث تغييرات جذرية أو أخطاء.
+نسعد بأي مساهمة أو اقتراح – كل المساهمات مرحب بها.
+
+
+🚧 Project Status: Experimental
+This project is still under active development and not yet complete.
+Contributions are warmly welcome – feel free to jump in!
