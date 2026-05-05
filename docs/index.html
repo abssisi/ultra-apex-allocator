@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Benchmark: Apex v4.2 vs v4.3 vs mimalloc</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Tajawal:wght@300;400;700;900&display=swap');
+
+  :root {
+    --bg:      #0a0c10;
+    --surface: #111520;
+    --border:  #1e2535;
+    --accent:  #00d9ff;
+    --green:   #00e676;
+    --amber:   #ffb300;
+    --red:     #ff4444;
+    --text:    #cdd6f4;
+    --dim:     #6b7280;
+    --mono:    'IBM Plex Mono', monospace;
+    --sans:    'Tajawal', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-weight: 400;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  /* ── Grid noise texture ── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      radial-gradient(ellipse 80% 50% at 20% 40%, rgba(0,217,255,.04) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 40% at 80% 60%, rgba(0,230,118,.03) 0%, transparent 50%);
+    pointer-events: none; z-index: 0;
+  }
+
+  .container { max-width: 1100px; margin: 0 auto; padding: 3rem 1.5rem; position: relative; z-index: 1; }
+
+  /* ── Header ── */
+  header { text-align: center; margin-bottom: 3.5rem; }
+  .version-tag {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: .7rem;
+    letter-spacing: .12em;
+    color: var(--accent);
+    border: 1px solid rgba(0,217,255,.3);
+    padding: .25rem .8rem;
+    border-radius: 20px;
+    margin-bottom: 1.2rem;
+    text-transform: uppercase;
+  }
+  h1 {
+    font-size: clamp(1.8rem, 5vw, 3rem);
+    font-weight: 900;
+    letter-spacing: -.02em;
+    line-height: 1.1;
+    margin-bottom: .8rem;
+  }
+  h1 span { color: var(--accent); }
+  .subtitle {
+    color: var(--dim);
+    font-size: .95rem;
+    font-family: var(--mono);
+  }
+
+  /* ── Cards ── */
+  .section { margin-bottom: 2.5rem; }
+  .section-title {
+    font-family: var(--mono);
+    font-size: .75rem;
+    letter-spacing: .15em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+  }
+  .section-title::before {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(to left, var(--border), transparent);
+  }
+  .section-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(to right, var(--border), transparent);
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    position: relative;
+    overflow: hidden;
+  }
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(0,217,255,.15), transparent);
+  }
+  .card h3 {
+    font-size: .85rem;
+    font-weight: 700;
+    color: var(--dim);
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    margin-bottom: 1.2rem;
+  }
+
+  /* ── Summary hero row ── */
+  .hero-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2.5rem;
+  }
+  .hero-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.2rem 1.4rem;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero-card.winner { border-color: rgba(0,230,118,.35); }
+  .hero-card.winner::before {
+    content: '▲ أفضل';
+    position: absolute; top: .5rem; left: .7rem;
+    font-size: .6rem; font-family: var(--mono);
+    color: var(--green); letter-spacing: .1em;
+  }
+  .hero-card .metric-label {
+    font-size: .7rem; font-family: var(--mono);
+    color: var(--dim); letter-spacing: .08em;
+    text-transform: uppercase; margin-bottom: .4rem;
+  }
+  .hero-card .metric-name {
+    font-size: .9rem; font-weight: 700; margin-bottom: .7rem;
+  }
+  .hero-card .metric-val {
+    font-family: var(--mono); font-size: 1.5rem; font-weight: 600;
+  }
+  .hero-card .metric-val .unit { font-size: .75rem; color: var(--dim); margin-right: .2rem; }
+
+  /* ── Bar chart ── */
+  .bar-chart { display: flex; flex-direction: column; gap: .65rem; }
+  .bar-row { display: grid; grid-template-columns: 110px 1fr 80px; align-items: center; gap: .8rem; }
+  .bar-label { font-size: .82rem; font-weight: 600; text-align: right; }
+  .bar-track { height: 22px; background: rgba(255,255,255,.04); border-radius: 4px; overflow: hidden; }
+  .bar-fill {
+    height: 100%; border-radius: 4px;
+    transition: width .4s ease;
+    display: flex; align-items: center; justify-content: flex-end;
+    padding-right: .3rem;
+  }
+  .bar-fill.v42  { background: linear-gradient(90deg, #0099bb, #00d9ff); }
+  .bar-fill.v43  { background: linear-gradient(90deg, #009944, #00e676); }
+  .bar-fill.vmalloc { background: linear-gradient(90deg, #7a5500, #ffb300); }
+  .bar-fill.vmimi { background: linear-gradient(90deg, #6b21a8, #a855f7); }
+  .bar-value { font-family: var(--mono); font-size: .8rem; color: var(--dim); text-align: left; }
+
+  /* ── Table ── */
+  .data-table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: .82rem; }
+  .data-table th {
+    text-align: center; padding: .6rem .8rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--dim); font-weight: 600; font-size: .7rem;
+    letter-spacing: .08em; text-transform: uppercase;
+  }
+  .data-table th:first-child { text-align: right; }
+  .data-table td {
+    text-align: center; padding: .55rem .8rem;
+    border-bottom: 1px solid rgba(30,37,53,.8);
+  }
+  .data-table td:first-child { text-align: right; font-weight: 600; color: var(--text); }
+  .data-table tr:last-child td { border-bottom: none; }
+  .data-table tr:hover td { background: rgba(255,255,255,.02); }
+  .good  { color: var(--green); font-weight: 600; }
+  .mid   { color: var(--amber); }
+  .bad   { color: var(--red); }
+  .muted { color: var(--dim); }
+  .pill {
+    display: inline-block;
+    font-size: .65rem; padding: .15rem .5rem;
+    border-radius: 10px; margin-right: .2rem;
+    font-weight: 600; letter-spacing: .04em;
+  }
+  .pill.green { background: rgba(0,230,118,.15); color: var(--green); border: 1px solid rgba(0,230,118,.3); }
+  .pill.red   { background: rgba(255,68,68,.12); color: var(--red);   border: 1px solid rgba(255,68,68,.25); }
+  .pill.amber { background: rgba(255,179,0,.12); color: var(--amber); border: 1px solid rgba(255,179,0,.25); }
+
+  /* ── Analysis block ── */
+  .analysis { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; }
+  .analysis-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.2rem;
+    border-right: 3px solid var(--border);
+  }
+  .analysis-item.positive { border-right-color: var(--green); }
+  .analysis-item.negative { border-right-color: var(--red); }
+  .analysis-item.neutral  { border-right-color: var(--amber); }
+  .analysis-item .ai-title {
+    font-size: .75rem; font-weight: 700;
+    letter-spacing: .06em; text-transform: uppercase;
+    margin-bottom: .5rem;
+    display: flex; align-items: center; gap: .4rem;
+  }
+  .analysis-item .ai-title.positive { color: var(--green); }
+  .analysis-item .ai-title.negative { color: var(--red); }
+  .analysis-item .ai-title.neutral  { color: var(--amber); }
+  .analysis-item p { font-size: .85rem; line-height: 1.7; color: var(--dim); }
+  .analysis-item code {
+    font-family: var(--mono); font-size: .78rem;
+    background: rgba(255,255,255,.06); padding: .1rem .35rem; border-radius: 4px;
+    color: var(--accent);
+  }
+
+  /* ── Verdict ── */
+  .verdict {
+    background: linear-gradient(135deg, rgba(0,217,255,.05), rgba(0,230,118,.05));
+    border: 1px solid rgba(0,217,255,.2);
+    border-radius: 12px;
+    padding: 1.8rem 2rem;
+    margin-top: 2.5rem;
+  }
+  .verdict h2 { font-size: 1.3rem; font-weight: 900; margin-bottom: 1rem; color: var(--accent); }
+  .verdict p { font-size: .9rem; line-height: 1.8; color: var(--text); margin-bottom: .7rem; }
+  .verdict p:last-child { margin-bottom: 0; }
+
+  /* ── Legend ── */
+  .legend {
+    display: flex; flex-wrap: wrap; gap: .8rem; margin-bottom: 1.2rem;
+    font-size: .8rem;
+  }
+  .legend-item { display: flex; align-items: center; gap: .4rem; }
+  .legend-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+  }
+
+  @media (max-width: 600px) {
+    .bar-row { grid-template-columns: 80px 1fr 60px; }
+    .hero-grid { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Header -->
+  <header>
+    <div class="version-tag">Benchmark Report · 2026</div>
+    <h1>Ultra Apex <span>v4.2</span> vs <span>v4.3</span><br>+ مقارنة مع mimalloc</h1>
+    <p class="subtitle">g++ -O3 -march=native · Linux x86-64 · 1 CPU · glibc malloc كخط أساس</p>
+  </header>
+
+  <!-- Hero metrics -->
+  <div class="hero-grid">
+    <div class="hero-card">
+      <div class="metric-label">Steady-State RT · 64B</div>
+      <div class="metric-name">Apex v4.2</div>
+      <div class="metric-val"><span class="unit">ns/op</span>20.1</div>
+    </div>
+    <div class="hero-card winner">
+      <div class="metric-label">Steady-State RT · 64B</div>
+      <div class="metric-name">Apex v4.3</div>
+      <div class="metric-val" style="color:var(--green)"><span class="unit">ns/op</span>6.8</div>
+    </div>
+    <div class="hero-card">
+      <div class="metric-label">Steady-State RT · 64B</div>
+      <div class="metric-name">mimalloc (مرجع)</div>
+      <div class="metric-val" style="color:var(--amber)"><span class="unit">ns/op</span>4–8</div>
+    </div>
+    <div class="hero-card">
+      <div class="metric-label">Batch Alloc · 64B</div>
+      <div class="metric-name">Apex v4.2 <span class="pill green">أفضل</span></div>
+      <div class="metric-val"><span class="unit">ns/op</span>132</div>
+    </div>
+    <div class="hero-card">
+      <div class="metric-label">Batch Alloc · 64B</div>
+      <div class="metric-name">Apex v4.3 <span class="pill red">أبطأ</span></div>
+      <div class="metric-val" style="color:var(--red)"><span class="unit">ns/op</span>398</div>
+    </div>
+    <div class="hero-card">
+      <div class="metric-label">استهلاك الذاكرة SC[2]</div>
+      <div class="metric-name">v4.3 / v4.2 ratio</div>
+      <div class="metric-val" style="color:var(--red)"><span class="unit">×</span>4.2</div>
+    </div>
+  </div>
+
+  <!-- 1. Round-trip bar chart -->
+  <div class="section">
+    <div class="section-title">1 · زمن الدورة الكاملة (ns/op) — 64B · خيط واحد</div>
+    <div class="card">
+      <div class="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:#00d9ff"></div>Apex v4.2</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#00e676"></div>Apex v4.3</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#ffb300"></div>glibc malloc</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#a855f7"></div>mimalloc (مرجع)</div>
+      </div>
+      <div class="bar-chart">
+        <div class="bar-row">
+          <div class="bar-label">Apex v4.2</div>
+          <div class="bar-track"><div class="bar-fill v42" style="width:100%"></div></div>
+          <div class="bar-value">20.07 ns</div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label">Apex v4.3</div>
+          <div class="bar-track"><div class="bar-fill v43" style="width:34%"></div></div>
+          <div class="bar-value">6.84 ns</div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label">mimalloc</div>
+          <div class="bar-track"><div class="bar-fill vmimi" style="width:30%"></div></div>
+          <div class="bar-value">~6 ns</div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label">glibc malloc</div>
+          <div class="bar-track"><div class="bar-fill vmalloc" style="width:1%"></div></div>
+          <div class="bar-value">~0.16 ns*</div>
+        </div>
+      </div>
+      <p style="font-size:.72rem;color:var(--dim);margin-top:1rem">
+        * glibc malloc: الرقم منخفض بشكل غير طبيعي بسبب تحسينات المترجم على دورات alloc/free الفارغة مع -O3.
+        الأداء الحقيقي لـ glibc malloc مع بيانات فعلية: ~30–80 ns.
+      </p>
+    </div>
+  </div>
+
+  <!-- 2. Size-class table -->
+  <div class="section">
+    <div class="section-title">2 · مقارنة جميع فئات الحجم (ns/round-trip)</div>
+    <div class="card">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>الحجم</th>
+            <th>Apex v4.2</th>
+            <th>Apex v4.3</th>
+            <th>فارق (v4.3/v4.2)</th>
+            <th>ملاحظة</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>16 B</td><td>8.54</td>
+            <td class="good">6.44</td>
+            <td class="good">×1.33 أسرع</td>
+            <td class="muted">v4.3 أفضل</td>
+          </tr>
+          <tr>
+            <td>32 B</td><td>8.63</td>
+            <td class="good">6.45</td>
+            <td class="good">×1.34 أسرع</td>
+            <td class="muted">v4.3 أفضل</td>
+          </tr>
+          <tr>
+            <td>64 B</td><td>8.54</td>
+            <td class="bad">17.48</td>
+            <td class="bad">×2.05 أبطأ</td>
+            <td class="bad">شاذّ — بسبب تسخين SC[2] في الاختبارات السابقة</td>
+          </tr>
+          <tr>
+            <td>128 B</td><td>8.37</td>
+            <td class="good">6.01</td>
+            <td class="good">×1.39 أسرع</td>
+            <td class="muted">v4.3 أفضل</td>
+          </tr>
+          <tr>
+            <td>256 B</td><td>10.62</td>
+            <td class="good">6.26</td>
+            <td class="good">×1.70 أسرع</td>
+            <td class="muted">v4.3 أفضل</td>
+          </tr>
+          <tr>
+            <td>512 B</td><td>8.82</td>
+            <td class="good">5.29</td>
+            <td class="good">×1.67 أسرع</td>
+            <td class="muted">v4.3 أفضل</td>
+          </tr>
+          <tr>
+            <td>1024 B</td><td>8.63</td>
+            <td class="good">6.31</td>
+            <td class="good">×1.37 أسرع</td>
+            <td class="muted">v4.3 أفضل</td>
+          </tr>
+          <tr>
+            <td>2048 B</td><td>13.66</td>
+            <td class="good">6.35</td>
+            <td class="good">×2.15 أسرع</td>
+            <td class="muted">v4.3 أفضل بشكل ملحوظ</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 3. Full summary table -->
+  <div class="section">
+    <div class="section-title">3 · جدول الملخص الكامل</div>
+    <div class="card">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>المُخصِّص</th>
+            <th>RT 64B (ns)</th>
+            <th>p99 (ns)</th>
+            <th>Batch (ns)</th>
+            <th>إعادة الاستخدام (ns)</th>
+            <th>MT Mops/s</th>
+            <th>إجمالي SC[2]</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Apex v4.2</td>
+            <td class="mid">20.07</td>
+            <td class="mid">42</td>
+            <td class="good">132</td>
+            <td class="good">21</td>
+            <td class="mid">242</td>
+            <td class="good">81,920</td>
+          </tr>
+          <tr>
+            <td>Apex v4.3</td>
+            <td class="good">6.84</td>
+            <td class="bad">50</td>
+            <td class="bad">398</td>
+            <td class="bad">358</td>
+            <td class="good">707</td>
+            <td class="bad">348,160</td>
+          </tr>
+          <tr>
+            <td>glibc malloc</td>
+            <td class="muted">~0.16*</td>
+            <td class="good">30</td>
+            <td class="mid">44</td>
+            <td class="good">16</td>
+            <td class="muted">13,130*</td>
+            <td class="muted">—</td>
+          </tr>
+          <tr>
+            <td style="color:var(--amber)">mimalloc (مرجع)</td>
+            <td class="good">4–8</td>
+            <td class="good">20–50</td>
+            <td class="good">3–6</td>
+            <td class="muted">N/A</td>
+            <td class="good">200–600</td>
+            <td class="muted">—</td>
+          </tr>
+        </tbody>
+      </table>
+      <p style="font-size:.72rem;color:var(--dim);margin-top:.8rem">
+        * قيم glibc malloc متأثرة بتحسينات المترجم. MT = multi-threaded.
+        أرقام mimalloc مأخوذة من معاييرها المنشورة على أجهزة desktop-class.
+      </p>
+    </div>
+  </div>
+
+  <!-- 4. Analysis -->
+  <div class="section">
+    <div class="section-title">4 · تحليل الأسباب التقنية</div>
+    <div class="analysis">
+
+      <div class="analysis-item positive">
+        <div class="ai-title positive">▲ v4.3: تحسين Steady-State (×2.9)</div>
+        <p>
+          الكود الجديد في <code>refill()</code> يستنزف المستودع بالكامل عبر <code>pop_all()</code>
+          بدلاً من <code>pop_batch()</code> المُكلف بالـ CAS المتكرر. هذا يقلل عدد العمليات الذرية
+          من O(n) إلى O(1)، مما يفسر الانجازية العالية في الحالة المستقرة.
+        </p>
+      </div>
+
+      <div class="analysis-item negative">
+        <div class="ai-title negative">▼ v4.3: كارثة Batch Allocation (×3 أبطأ)</div>
+        <p>
+          <code>BUF_SIZE = MAG_BATCH × 2 = 32</code> صغير جداً للـ refill.
+          عند تخصيص آلاف العناصر دفعةً واحدة، يستدعي <code>refill()</code>
+          مراراً مع 32 عنصر فقط في كل مرة، مما يُضاعف استدعاءات <code>grow()</code>
+          ويرفع استهلاك الذاكرة بمعامل 4.2× في SC[2].
+        </p>
+      </div>
+
+      <div class="analysis-item negative">
+        <div class="ai-title negative">▼ v4.3: انهيار في إعادة الاستخدام (×17 أبطأ)</div>
+        <p>
+          بعد تجزؤ الذاكرة، البلوكات المحررة تُعاد إلى المستودع لكن سياسة
+          <code>maybe_flush_to_global()</code> مع الحد الأدنى 32 للـ BUF_SIZE
+          تمنع استرجاعها بكفاءة. النتيجة: يُطلق <code>grow()</code> حتى مع وجود
+          كتل حرة في المستودع!
+        </p>
+      </div>
+
+      <div class="analysis-item positive">
+        <div class="ai-title positive">▲ v4.3: prepare_spare بدون قفل (Lock-Free CAS)</div>
+        <p>
+          استبدال الـ <code>mutex</code> بـ <code>atomic CAS</code> في
+          <code>prepare_spare()</code> هو تحسين حقيقي لمسار التحضير المسبق.
+          يُقلل الاحتكاك على المسار شبه الساخن ويمنح MT أداءً أفضل (×2.9).
+        </p>
+      </div>
+
+      <div class="analysis-item negative">
+        <div class="ai-title negative">▼ v4.3: تضخم الذاكرة (+320% في SC[2])</div>
+        <p>
+          سياسة <code>grow()</code> التي تعطي الأولوية للخيط المحلي (16 كتلة فقط)
+          ثم تدفع الباقي بدفعات 128 عبر global_stack_، تجعل كل استدعاء لـ refill
+          يُحفز grow جديد. في الاختبارات الأولى للـ 64B احتجنا ~340K كتلة بدلاً من 82K.
+        </p>
+      </div>
+
+      <div class="analysis-item neutral">
+        <div class="ai-title neutral">◆ مقارنة مع mimalloc</div>
+        <p>
+          mimalloc يحقق 4–8 ns في الحالة المستقرة (قريب من v4.3)، لكنه يتفوق في
+          batch allocation (3–6 ns) بفضل استخدام segment-based allocation وعدم
+          الحاجة لإدارة قائمة مرتبطة. كلا الإصدارين يفتقران لـ
+          <code>MIMALLOC_ALLOW_LARGE_OS_PAGES</code> وتحسينات hugepage التي تمنح mimalloc
+          ميزة إضافية على الأجهزة الحقيقية.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. Batch & Fragmentation bars -->
+  <div class="section">
+    <div class="section-title">5 · Batch Alloc و إعادة الاستخدام (ns/op، أقل = أفضل)</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+      <div class="card">
+        <h3>Batch Hold Alloc — 64B</h3>
+        <div class="bar-chart">
+          <div class="bar-row">
+            <div class="bar-label">Apex v4.2</div>
+            <div class="bar-track"><div class="bar-fill v42" style="width:33%"></div></div>
+            <div class="bar-value">132 ns</div>
+          </div>
+          <div class="bar-row">
+            <div class="bar-label">glibc</div>
+            <div class="bar-track"><div class="bar-fill vmalloc" style="width:11%"></div></div>
+            <div class="bar-value">44 ns</div>
+          </div>
+          <div class="bar-row">
+            <div class="bar-label">Apex v4.3</div>
+            <div class="bar-track"><div class="bar-fill v43" style="width:100%"></div></div>
+            <div class="bar-value">398 ns ⚠</div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Memory Reuse After Fragmentation</h3>
+        <div class="bar-chart">
+          <div class="bar-row">
+            <div class="bar-label">glibc</div>
+            <div class="bar-track"><div class="bar-fill vmalloc" style="width:5%"></div></div>
+            <div class="bar-value">16 ns</div>
+          </div>
+          <div class="bar-row">
+            <div class="bar-label">Apex v4.2</div>
+            <div class="bar-track"><div class="bar-fill v42" style="width:6%"></div></div>
+            <div class="bar-value">21 ns</div>
+          </div>
+          <div class="bar-row">
+            <div class="bar-label">Apex v4.3</div>
+            <div class="bar-track"><div class="bar-fill v43" style="width:100%"></div></div>
+            <div class="bar-value">358 ns ⚠</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6. Internal stats -->
+  <div class="section">
+    <div class="section-title">6 · إحصاءات الذاكرة الداخلية</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+      <div class="card">
+        <h3>Apex v4.2 — 8 فئات حجم</h3>
+        <table class="data-table">
+          <thead><tr><th>SC</th><th>حجم</th><th>إجمالي</th><th>مُستخدم</th></tr></thead>
+          <tbody>
+            <tr><td>0</td><td>16B</td><td>4,096</td><td>3,600</td></tr>
+            <tr><td>1</td><td>32B</td><td>2,048</td><td>1,552</td></tr>
+            <tr><td>2</td><td>64B</td><td class="good">81,920</td><td>61,504</td></tr>
+            <tr><td>3</td><td>128B</td><td>1,024</td><td>528</td></tr>
+            <tr><td>4</td><td>256B</td><td>1,024</td><td>528</td></tr>
+            <tr><td>5</td><td>512B</td><td>512</td><td>16</td></tr>
+            <tr><td>6</td><td>1024B</td><td>512</td><td>16</td></tr>
+            <tr><td>7</td><td>2048B</td><td>256</td><td>16</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card">
+        <h3>Apex v4.3 — 8 فئات حجم</h3>
+        <table class="data-table">
+          <thead><tr><th>SC</th><th>حجم</th><th>إجمالي</th><th>مُستخدم</th></tr></thead>
+          <tbody>
+            <tr><td>0</td><td>16B</td><td>4,096</td><td>3,600</td></tr>
+            <tr><td>1</td><td>32B</td><td>2,048</td><td>1,552</td></tr>
+            <tr><td>2</td><td>64B</td><td class="bad">348,160</td><td>10,273</td></tr>
+            <tr><td>3</td><td>128B</td><td>1,024</td><td>528</td></tr>
+            <tr><td>4</td><td>256B</td><td>1,024</td><td>528</td></tr>
+            <tr><td>5</td><td>512B</td><td>512</td><td>16</td></tr>
+            <tr><td>6</td><td>1024B</td><td>512</td><td>16</td></tr>
+            <tr><td>7</td><td>2048B</td><td>256</td><td>16</td></tr>
+          </tbody>
+        </table>
+        <p style="font-size:.72rem;color:var(--red);margin-top:.6rem">
+          ⚠ SC[2] استهلك 4.2× ذاكرة أكثر من v4.2 بسبب BUF_SIZE=32 الصغير
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Verdict -->
+  <div class="verdict">
+    <h2>◈ الحكم النهائي</h2>
+    <p>
+      <strong>v4.3 أسرع في الحالة المستقرة</strong> (×2.9 أفضل من v4.2، ومتقارب مع mimalloc في 6.84 ns)
+      بفضل استبدال <code>pop_batch</code> بـ <code>pop_all</code> في مسار refill، والـ CAS-only في <code>prepare_spare</code>.
+    </p>
+    <p>
+      <strong>لكن v4.3 يحمل ثلاثة عيوب بنيوية خطيرة:</strong>
+      (1) <code>BUF_SIZE = 32</code> في refill صغير جداً ويُفجّر استهلاك الذاكرة عند تخصيص كميات كبيرة دفعةً واحدة.
+      (2) سياسة depot flush المعقدة تُعطّل إعادة استخدام الذاكرة بعد التجزؤ (×17 تراجعاً).
+      (3) <code>pop_all_unpacked</code> يحمل كوداً لإعادة الفائض معطوباً منطقياً.
+    </p>
+    <p>
+      <strong>مقارنةً بـ mimalloc:</strong> كلا الإصدارين لم يصلا بعد لنفس مستوى كفاءة الذاكرة.
+      mimalloc يجمع السرعة (4–8 ns) مع كفاءة ممتازة في batch وتجزؤ منخفض عبر تصميم segment-based.
+    </p>
+    <p>
+      <strong>التوصية:</strong> ارفع <code>BUF_SIZE</code> في v4.3 إلى <code>GLOBAL_BATCH = 512</code>، وأصلح منطق <code>pop_all_unpacked</code>،
+      وأعد النظر في سياسة <code>grow()</code> لتجنب استدعاءات متكررة — عندها ستتفوق v4.3 على v4.2 في جميع السيناريوهات.
+    </p>
+  </div>
+
+</div>
+</body>
+</html>
