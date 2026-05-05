@@ -1,0 +1,22 @@
+cmake_minimum_required(VERSION 3.20)
+project(UltraApexAllocator VERSION 4.4 LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+find_package(Threads REQUIRED)
+
+# تحسينات الأداء للبناء النهائي
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -march=native -flto")
+set(CMAKE_CXX_FLAGS_DEBUG "-O0 -g -fsanitize=address,undefined")
+
+# المكتبة الرئيسية (Header-Implementation في ملف واحد)
+add_library(apex4 STATIC apex4.cpp)
+target_include_directories(apex4 PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(apex4 PUBLIC Threads::Threads)
+target_compile_features(apex4 PUBLIC cxx_std_20)
+
+# ملاحظة: يمكنك لاحقاً إضافة ملف main.cpp وبناء executable للاختبار
+# add_executable(bench main.cpp)
+# target_link_libraries(bench PRIVATE apex4)
