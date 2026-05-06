@@ -18,6 +18,5 @@ Contributions are warmly welcome – feel free to jump in!
 
 [ You are welcome to join our discussion forum.](https://t.me/ultra_apex_allocater)
 
-[We welcome your support by boosting our channel]
-(https://t.me/boost/ultra_apex_allocater)
+[We welcome your support by boosting our channel](https://t.me/boost/ultra_apex_allocater)
 
