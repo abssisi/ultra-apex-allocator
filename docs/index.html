@@ -644,12 +644,6 @@
       <strong>مقارنةً بـ mimalloc:</strong> كلا الإصدارين لم يصلا بعد لنفس مستوى كفاءة الذاكرة.
       mimalloc يجمع السرعة (4–8 ns) مع كفاءة ممتازة في batch وتجزؤ منخفض عبر تصميم segment-based.
     </p>
-    <p>
-      <strong>التوصية:</strong> ارفع <code>BUF_SIZE</code> في v4.3 إلى <code>GLOBAL_BATCH = 512</code>، وأصلح منطق <code>pop_all_unpacked</code>،
-      وأعد النظر في سياسة <code>grow()</code> لتجنب استدعاءات متكررة — عندها ستتفوق v4.3 على v4.2 في جميع السيناريوهات.
-    </p>
-  </div>
-
-</div>
+     
 </body>
 </html>
