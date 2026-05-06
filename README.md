@@ -15,3 +15,5 @@ High-performance lock-free C++20 memory allocator for Linux x86-64
 🚧 Project Status: Experimental
 This project is still under active development and not yet complete.
 Contributions are warmly welcome – feel free to jump in!
+[Contact me on Telegram](https://t.me/ultra_apex_allocater)
+
